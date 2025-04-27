@@ -1,0 +1,114 @@
+version: "3.7"
+
+# This file defines the core Dagster services
+# Run this alongside docker-compose.external.yml for local dependencies:
+# docker-compose -f docker-compose.yml -f docker-compose.external.yml up -d
+
+services:
+  # MariaDB Database for Dagster Instance
+  mariadb-db:
+    image: mariadb:10.6 # Use a specific MariaDB version
+    container_name: dagster_mariadb
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DAGSTER_DB_ROOT_PASSWORD:-rootpassword} # Use from .env or default
+      MYSQL_DATABASE: ${DAGSTER_DB_NAME:-dagster}
+      MYSQL_USER: ${DAGSTER_DB_USER:-dagster}
+      MYSQL_PASSWORD: ${DAGSTER_DB_PASSWORD:-dagster}
+    volumes:
+      - dagster_mariadb_data:/var/lib/mysql
+    networks:
+      - dagster_network
+    healthcheck:
+        test: ["CMD", "mysqladmin" ,"ping", "-h", "localhost", "-u${DAGSTER_DB_USER}", "-p${DAGSTER_DB_PASSWORD}"]
+        interval: 10s
+        timeout: 5s
+        retries: 5
+
+  # Dagster User Code Service (gRPC server)
+  dagster-user-code:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: dagster_user_code
+    image: dagster-mariadb-s3-user-code # You can customize this image name
+    restart: always
+    environment:
+      DAGSTER_MYSQL_USER: ${DAGSTER_DB_USER:-dagster}
+      DAGSTER_MYSQL_PASSWORD: ${DAGSTER_DB_PASSWORD:-dagster}
+      DAGSTER_MYSQL_DB: ${DAGSTER_DB_NAME:-dagster}
+      DAGSTER_MYSQL_HOST: mariadb-db # Service name of the MariaDB container
+    env_file:
+      - .env
+    volumes:
+      - ./dagster.yaml:/opt/dagster/dagster_home/dagster.yaml # Mount instance config
+      - ./workspace.yaml:/opt/dagster/dagster_home/workspace.yaml # Mount workspace config
+      - dagster_storage:/opt/dagster/dagster_home/storage # Mount shared storage
+    networks:
+      - dagster_network
+    depends_on:
+      mariadb-db:
+          condition: service_healthy
+
+  # Dagster Webserver/UI
+  dagster-webserver:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: dagster-mariadb-s3-user-code
+    container_name: dagster_webserver
+    restart: always
+    entrypoint: ["dagster-webserver", "-h", "0.0.0.0", "-p", "3000", "-w", "/opt/dagster/dagster_home/workspace.yaml"]
+    environment:
+      DAGSTER_MYSQL_USER: ${DAGSTER_DB_USER:-dagster}
+      DAGSTER_MYSQL_PASSWORD: ${DAGSTER_DB_PASSWORD:-dagster}
+      DAGSTER_MYSQL_DB: ${DAGSTER_DB_NAME:-dagster}
+      DAGSTER_MYSQL_HOST: mariadb-db
+    volumes:
+      - ./dagster.yaml:/opt/dagster/dagster_home/dagster.yaml # Mount instance config
+      - ./workspace.yaml:/opt/dagster/dagster_home/workspace.yaml
+      - ./.env:/opt/dagster/dagster_home/.env
+      - dagster_storage:/opt/dagster/dagster_home/storage
+    ports:
+      - "3000:3000"
+    depends_on:
+      mariadb-db:
+        condition: service_healthy
+      dagster-user-code:
+        condition: service_started # Wait for user code to be available
+    networks:
+      - dagster_network
+
+  # Dagster Daemon Service
+  dagster-daemon:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: dagster-mariadb-s3-user-code
+    container_name: dagster_daemon
+    restart: always
+    entrypoint: ["dagster-daemon", "run"]
+    environment:
+      DAGSTER_MYSQL_USER: ${DAGSTER_DB_USER:-dagster}
+      DAGSTER_MYSQL_PASSWORD: ${DAGSTER_DB_PASSWORD:-dagster}
+      DAGSTER_MYSQL_DB: ${DAGSTER_DB_NAME:-dagster}
+      DAGSTER_MYSQL_HOST: mariadb-db
+    volumes:
+      - ./dagster.yaml:/opt/dagster/dagster_home/dagster.yaml # Mount instance config
+      - ./workspace.yaml:/opt/dagster/dagster_home/workspace.yaml
+      - dagster_storage:/opt/dagster/dagster_home/storage
+    depends_on:
+      mariadb-db:
+        condition: service_healthy
+      dagster-user-code:
+        condition: service_started # Wait for user code to be available
+    networks:
+      - dagster_network
+
+volumes:
+  dagster_mariadb_data:
+  dagster_storage:
+
+networks:
+  dagster_network:
+    external: true # Connect to the network created by docker-compose.external.yml

@@ -1,0 +1,40 @@
+# Git files
+.git/
+.gitignore
+
+# Docker files
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# Python virtual environment
+venv/
+.venv/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+
+# Build artifacts
+build/
+dist/
+
+# Environment variables
+.env
+
+# IDE specific
+.idea/
+.vscode/
+
+# Local Dagster storage/logs
+storage/
+logs/
+
+# README
+README.md
+
+# Example env file
+.env.example

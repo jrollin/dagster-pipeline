@@ -1,0 +1,7 @@
+# workspace.yaml
+
+load_from:
+  - grpc_server:
+      host: dagster-user-code # Service name from docker-compose.yml
+      port: 4000
+      location_name: "mariadb_s3_code_location" # A name for your code location

@@ -1,0 +1,82 @@
+version: "3.7"
+
+# This file defines the local external services (source DB and S3 storage)
+# Run this alongside docker-compose.yml using:
+# docker-compose -f docker-compose.yml -f docker-compose.external.yml up -d
+
+services:
+  # MariaDB Database for Source Data (Example)
+  source-mariadb:
+    image: mariadb:10.6
+    container_name: source_mariadb
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: ${SOURCE_DB_ROOT_PASSWORD:-rootpassword} # Use from .env or default
+      MYSQL_DATABASE: ${SOURCE_DB_NAME:-sourcedb}
+      MYSQL_USER: ${SOURCE_DB_USER:-sourceuser}
+      MYSQL_PASSWORD: ${SOURCE_DB_PASSWORD:-sourcepassword}
+    volumes:
+      # Mount an init script to create tables/data
+      - ./init-source-db.sql:/docker-entrypoint-initdb.d/init.sql
+      - source_mariadb_data:/var/lib/mysql
+    networks:
+      - dagster_network # Connect to the same network as Dagster services
+    healthcheck:
+      test: ["CMD", "mysqladmin" ,"ping", "-h", "localhost", "-u${SOURCE_DB_USER}", "-p${SOURCE_DB_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # MinIO Service (Local S3 Replacement)
+  minio:
+    image: minio/minio:latest
+    container_name: minio
+    ports:
+      - "9000:9000"  # API port
+      - "9001:9001"  # Console port
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}  # Use from .env or default
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+    volumes:
+      - minio_data:/data
+    networks:
+      - dagster_network # Connect to the same network as Dagster services
+    command: server /data --console-address ":9001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+
+  # Helper service to create the MinIO bucket
+  create-minio-bucket:
+    image: amazon/aws-cli:latest # Using aws-cli image
+    container_name: create_minio_bucket
+    environment:
+      AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-minioadmin}
+      AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      AWS_DEFAULT_REGION: ${AWS_REGION:-us-east-1} # Region doesn't matter much for local MinIO
+    entrypoint: >
+      /bin/sh -c "
+      echo 'Waiting for MinIO...';
+      until aws --endpoint-url ${MINIO_ENDPOINT_URL:-http://minio:9000} s3 ls > /dev/null 2>&1; do
+        sleep 1;
+      done;
+      echo 'MinIO is up. Creating bucket: ${S3_BUCKET}';
+      aws --endpoint-url ${MINIO_ENDPOINT_URL:-http://minio:9000} s3 mb s3://${S3_BUCKET} || echo 'Bucket already exists or error creating bucket.';
+      echo 'Bucket creation attempt finished.';
+      "
+    networks:
+      - dagster_network # Connect to the same network as Dagster services
+    depends_on:
+      minio:
+        condition: service_healthy
+
+volumes:
+  source_mariadb_data:
+  minio_data:
+
+networks:
+  dagster_network:
+    driver: bridge
+    name: dagster_network # Explicitly name the network

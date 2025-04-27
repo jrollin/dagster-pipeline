@@ -1,0 +1,38 @@
+# dagster.yaml
+
+run_storage:
+  module: dagster_mysql.run_storage
+  class: MySQLRunStorage
+  config:
+    mysql_db:
+      username: "dagster"
+      password: "dagster"
+      hostname: "mariadb-db" # Service name from docker-compose.yml
+      db_name: "dagster"
+      port: 3306
+
+schedule_storage:
+  module: dagster_mysql.schedule_storage
+  class: MySQLScheduleStorage
+  config:
+    mysql_db:
+      username: "dagster"
+      password: "dagster"
+      hostname: "mariadb-db"
+      db_name: "dagster"
+      port: 3306
+
+# Optional: Configure event log storage if needed
+# event_log_storage:
+#   module: dagster_mysql.event_log
+#   class: MySQLEventLogStorage
+#   config:
+#     mysql_db:
+#       username: "dagster"
+#       password: "dagster"
+#       hostname: "mariadb-db"
+#       db_name: "dagster"
+#       port: 3306
+
+# telemtry is enabled by default
+# telemetry:

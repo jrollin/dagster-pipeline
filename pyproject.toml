@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "test_dagster"
+version = "0.0.1"
+description = "A Dagster project for extracting MariaDB data to S3."
+readme = "README.md"
+requires-python = ">=3.8"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: OS Independent",
+]
+dependencies = [
+    "dagster",
+    "dagster-aws",
+    "pandas",
+    "pyarrow",
+    "mariadb",
+    "python-dotenv",
+    "dagster-webserver", # Required for UI
+]
+
+[project.urls]
+"Homepage" = "https://github.com/your-username/test-dagster" # Optional: Update with your repo URL
+
+[tool.setuptools.packages.find]
+where = ["."]

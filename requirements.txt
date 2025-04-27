@@ -1,0 +1,9 @@
+dagster
+dagster-aws
+pandas
+pyarrow
+mariadb
+python-dotenv
+dagster-webserver
+dagster-mysql # Added for Dagster internal storage
+awscli # Added for MinIO setup
